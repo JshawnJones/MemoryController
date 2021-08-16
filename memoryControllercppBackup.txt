@@ -1,0 +1,206 @@
+#include <typeinfo>
+#include <string>
+#include <iostream>
+#include <Windows.h>
+#include <TlHelp32.h>
+#include "stdio.h"
+#include <tchar.h>
+#include <map>
+#include "psapi.h"
+#include "tlhelp32.h"
+
+using std::string;
+using namespace std;
+
+BOOL ListProcessModules( DWORD dwPID );
+BOOL ListProcessThreads( DWORD dwOwnerPID );
+//map<int, MODULEENTRY32> GetSomeModule32( HANDLE hProcessSnap, MODULEENTRY32 me32){
+//	int mcounter = 1;
+//	//map for processesList
+//	map<int, MODULEENTRY32> modules;
+//
+//
+//	Module32First( hProcessSnap, &me32 );
+//    do{
+//    	printf("\n %d. %s", mcounter, me32.szExePath);
+//		modules.insert(pair<int, MODULEENTRY32>(mcounter, me32));
+//
+//		mcounter++;
+//    } while( Module32Next( hProcessSnap, &me32 ) );
+//
+//    return modules;
+//}
+
+int main( ) {
+
+    SetConsoleTitle("Memory Class Test");
+    HANDLE hProcessSnap;
+    HANDLE hProcess;
+    PROCESSENTRY32 pe32;
+    DWORD dwPriorityClass;
+    int counter = 1;
+    int counterNum;
+    HANDLE processHandle;
+
+    // Take a snapshot of all processesList in the system.
+    hProcessSnap = CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
+
+    //check if hProcessSnap works
+    if( hProcessSnap == INVALID_HANDLE_VALUE ){
+    	printf( TEXT("CreateToolhelp32Snapshot (of processesList)") );
+        return 1;
+    }
+
+    // Set the size of the structure before using it.
+    pe32.dwSize = sizeof( PROCESSENTRY32 );
+
+    //get info on the first process
+    Process32First( hProcessSnap, &pe32 );
+    //map for processesList
+    map<int, PROCESSENTRY32> processesList;
+
+    do{
+    	//PROCESS NAME
+		printf("\n %d. %s", counter, pe32.szExeFile);
+
+		processesList.insert(pair<int, PROCESSENTRY32>(counter, pe32));
+
+		counter++;
+    } while( Process32Next( hProcessSnap, &pe32 ) );
+
+
+    printf("\n Enter the process number (1-%d):", counter);
+    cin >> counterNum;
+
+    printf("\n=====================================================\n");
+    printf(processesList.at(counterNum).szExeFile);
+    printf("\n=====================================================" );
+
+    printf( "\n  Process ID        = 0x%08X", processesList.at(counterNum).th32ProcessID );
+    printf( "\n  Thread count      = %d",   processesList.at(counterNum).cntThreads );
+    printf( "\n  Parent process ID = 0x%08X", processesList.at(counterNum).th32ParentProcessID );
+    printf( "\n  Priority base     = %d", processesList.at(counterNum).pcPriClassBase );
+    printf(" \n-------------------------------------------------------" );
+
+    ListProcessThreads( processesList.at(counterNum).th32ProcessID );
+
+    int processId = processesList.at(counterNum).th32ProcessID;
+
+    DWORD access = PROCESS_VM_READ |
+                   PROCESS_QUERY_INFORMATION |
+                   PROCESS_VM_WRITE |
+                   PROCESS_VM_OPERATION;
+
+//    processHandle = OpenProcess(PROCESS_ALL_ACCESS, false, processId);
+    processHandle = OpenProcess(access, false, processId);
+
+
+    HMODULE *hModules = NULL;
+//    HMODULE targetModule;
+    DWORD cModules;
+//    DWORD64 baseAddress = -1;
+    char szBuf[50];
+//    string sModuleName = (string) processesList.at(counterNum).szExeFile;
+
+//    EnumProcessModules(processHandle, hModules, 0, &cModules);
+    hModules = new HMODULE[cModules/sizeof(HMODULE)];
+
+    EnumProcessModules(processHandle, hModules, cModules/sizeof(HMODULE), &cModules);
+
+
+//    if(EnumProcessModules(processHandle, hModules, cModules/sizeof(HMODULE), &cModules)){
+
+    	for (int i = 0; i < sizeof(hModules); i ++){
+
+//    		GetModuleBaseName(processHandle, hModules[i], szBuf, sizeof(szBuf));
+
+
+    		if(GetModuleFileNameExA(processHandle, hModules[i], szBuf, sizeof(szBuf))){
+        		cout << endl;
+        		cout << "----------------------------------";
+        		cout << endl;
+        		cout << szBuf << processesList.at(counterNum).szExeFile;
+        		cout << endl;
+
+        		MODULEINFO info;
+        		LPVOID lpBaseOfDll;
+
+        		GetModuleInformation(processHandle, hModules[i], &info, sizeof(info));
+        		cout << endl;
+        		cout << (DWORD_PTR)info.lpBaseOfDll;
+        		break;
+//    			if(sModuleName.compare(szBuf) == 0) {
+
+//    				baseAddress = (DWORD64)hModules[i];
+//
+//					break;
+//				 }
+    		}
+//
+    	}
+
+
+//    }
+
+//    delete[] hModules;
+//    cout << endl;
+//    cout << "this is a test target module: " << targetModule;
+//	LPMODULEINFO testlpmodinfo;
+//	    cout << endl;
+//	    GetModuleInformation(processHandle, hModules[i], testlpmodinfo, sizeof(testlpmodinfo));
+//	    cout << testlpmodinfo;
+
+//    cout << endl;
+//    cout << "Base address for module \"" << processesList.at(counterNum).szExeFile << "\" is " << baseAddress << " (in dec)..."<< endl;
+
+//
+//    int buffer = 0;
+//    SIZE_T NumberOfBytesToRead = sizeof(buffer);
+//    SIZE_T NumberOfBytesActuallyRead;
+//    ReadProcessMemory(processHandle, (LPCVOID)baseAddress, &buffer, NumberOfBytesToRead, &NumberOfBytesActuallyRead);
+//
+//    cout << buffer<< endl;
+
+
+    return 0;
+}
+
+BOOL ListProcessThreads( DWORD dwOwnerPID ){
+
+  HANDLE hThreadSnap = INVALID_HANDLE_VALUE;
+  THREADENTRY32 te32;
+
+  // Take a snapshot of all running threads
+  hThreadSnap = CreateToolhelp32Snapshot( TH32CS_SNAPTHREAD, 0 );
+  if( hThreadSnap == INVALID_HANDLE_VALUE )
+    return( FALSE );
+
+  // Fill in the size of the structure before using it.
+  te32.dwSize = sizeof(THREADENTRY32);
+
+  // Retrieve information about the first thread,
+  // and exit if unsuccessful
+  if( !Thread32First( hThreadSnap, &te32 ) ){
+	  printf( TEXT("Thread32First") ); // show cause of failure
+    CloseHandle( hThreadSnap );          // clean the snapshot object
+    return( FALSE );
+  }
+
+  // Now walk the thread list of the system,
+  // and display information about each thread
+  // associated with the specified process
+  do{
+    if( te32.th32OwnerProcessID == dwOwnerPID ){
+    	printf( TEXT("\n\n     th32OwnerProcessID      = 0x%08X"), te32.th32OwnerProcessID );
+    	printf( TEXT("\n\n     THREAD ID      = 0x%08X"), te32.th32ThreadID );
+    	printf( TEXT("\n     Base priority  = %d"), te32.tpBasePri );
+    	printf( TEXT("\n     Delta priority = %d"), te32.tpDeltaPri );
+    	printf( TEXT("\n"));
+    }
+  } while( Thread32Next(hThreadSnap, &te32 ) );
+
+  CloseHandle( hThreadSnap );
+  return( TRUE );
+}
+
+
